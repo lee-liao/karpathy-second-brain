@@ -40,20 +40,20 @@ sbsearch "topic"
 
 ```
 /home/lee/second-brain/
-├── raw/           # Unprocessed content (dump everything here)
-│   └── [domain]/  # Organized by source domain
-├── wiki/          # AI-organized knowledge base
-│   ├── tech/      # Technical articles, tutorials, tools
-│   ├── business/  # Business cases, startups, strategy
-│   ├── life/      # Personal growth, philosophy, health
-│   ├── quotes/    # Notable quotes, excerpts
-│   └── INDEX.md   # Master table of contents
-├── outputs/       # Q&A responses, generated content
-├── scripts/       # Helper automation scripts
-├── CLAUDE.md      # AI instructions (how to process content)
-├── PROMPTS.md     # Copy-paste prompts for workflows
-├── QUICKSTART.md  # One-page reference card
-└── README.md      # This file
++-- raw/              # Unprocessed content (dump everything here)
+|   +-- [domain]/     # Organized by source domain
++-- wiki/             # AI-organized knowledge base
+|   +-- tech/         # Technical articles, tutorials, tools
+|   +-- business/     # Business cases, startups, strategy
+|   +-- life/         # Personal growth, philosophy, health
+|   +-- quotes/       # Notable quotes, excerpts
+|   +-- INDEX.md      # Master table of contents
++-- outputs/          # Q&A responses, generated content
++-- scripts/          # Helper automation scripts
++-- CLAUDE.md         # AI instructions (how to process content)
++-- PROMPTS.md        # Copy-paste prompts for workflows
++-- QUICKSTART.md     # One-page reference card
++-- README.md         # This file
 ```
 
 ---
@@ -146,18 +146,18 @@ sblsraw     # List raw files pending processing
 
 ```bash
 # Traditional systems
-Database → Index → Search Engine → Results
+Database -> Index -> Search Engine -> Results
 
 # This system
-*.md files → grep → Results
+*.md files -> grep -> Results
 ```
 
 **Benefits:**
-- ✅ Files are human-readable (any text editor)
-- ✅ Git-friendly (version control your knowledge)
-- ✅ No database corruption
-- ✅ Zero dependencies
-- ✅ Grep is blazing fast
+- [OK] Files are human-readable (any text editor)
+- [OK] Git-friendly (version control your knowledge)
+- [OK] No database corruption
+- [OK] Zero dependencies
+- [OK] Grep is blazing fast
 
 ### Search Performance
 
@@ -180,7 +180,7 @@ Database → Index → Search Engine → Results
 ```
 
 **When to optimize:**
-- ~10,000 articles (~5 years) → Consider archiving old content
+- ~10,000 articles (~5 years) -> Consider archiving old content
 - Process in batches instead of all at once
 - Archive by year: `wiki/2026/`, `wiki/2027/`, `wiki/archive/`
 
@@ -306,14 +306,14 @@ sbrecent
 
 ## Tips & Best Practices
 
-### DO ✅
+### DO [OK]
 - **Collect freely** - Don't worry about organizing when collecting
 - **Process weekly** - Batch processing is more efficient
 - **Tag sparingly** - 3-5 relevant tags maximum
 - **Link articles** - Build connections via `related:` metadata
 - **Save outputs** - Good Q&A should go to `outputs/`
 
-### DON'T ❌
+### DON'T [X]
 - **Don't** overthink categories - Start simple, evolve later
 - **Don't** batch process 1000+ files - Do it incrementally
 - **Don't** duplicate - Link to existing articles instead
