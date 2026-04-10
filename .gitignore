@@ -1,0 +1,25 @@
+# Ignore raw content (personal, unprocessed, may contain sensitive info)
+raw/
+
+# Ignore outputs (personal Q&A, generated content)
+outputs/
+
+# Ignore Claude Code internal files
+.claude/
+.agents/
+skills-lock.json
+
+# Ignore editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Optional: Ignore local customizations
+# Uncomment if you want to keep certain files private
+# PERSONAL.md
+# secrets.md
