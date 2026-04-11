@@ -131,13 +131,13 @@ if [ "$REQUIRES_BROWSER" = true ]; then
                 agent-browser --profile Default open '$URL' 2>&1
                 sleep 3
                 agent-browser eval 'document.body.innerText' 2>&1
-            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"' | $VENV_PYTHON -c "import sys; print(sys.stdin.read().replace('\\\\n', '\n'))")
         else
             BROWSER_CONTENT=$(timeout 30 bash -c "
                 agent-browser open '$URL' 2>&1
                 sleep 2
                 agent-browser eval 'document.body.innerText' 2>&1
-            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"' | $VENV_PYTHON -c "import sys; print(sys.stdin.read().replace('\\\\n', '\n'))")
         fi
 
         # Clean up agent-browser session
@@ -284,7 +284,7 @@ if [ "$REQUIRES_BROWSER" = false ]; then
             agent-browser open '$URL' 2>&1
             sleep 2
             agent-browser eval 'document.body.innerText' 2>&1
-        " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+        " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"' | $VENV_PYTHON -c "import sys; print(sys.stdin.read().replace('\\\\n', '\n'))")
 
         # Clean up agent-browser session
         agent-browser close &> /dev/null
