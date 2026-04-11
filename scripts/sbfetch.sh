@@ -3,8 +3,9 @@
 # Usage: sbfetch <url>
 #
 # Strategy:
-# 1. Try Trafilatura (fast, standalone)
-# 2. If failed, fall back to AI (via Web Reader MCP)
+# 1. Try Trafilatura (fast, standalone) - for most sites
+# 2. Try agent-browser (JavaScript rendering) - for protected sites
+# 3. Fall back to AI prompt (user manual) - if both fail
 
 URL="$1"
 
@@ -50,73 +51,6 @@ fi
 # Create raw directory and domain subdirectory if they don't exist
 mkdir -p "$RAW_DIR"
 
-# Sites that require AI (skip Trafilatura)
-AI_REQUIRED_SITES=(
-    "mp.weixin.qq.com"
-    "weixin.qq.com"
-    "twitter.com"
-    "x.com"
-    "facebook.com"
-    "medium.com"
-    "substack.com"
-    "linkedin.com"
-)
-
-# Check if this domain requires AI
-REQUIRES_AI=false
-for site in "${AI_REQUIRED_SITES[@]}"; do
-    if [[ "$DOMAIN" == *"$site"* ]] || [[ "$URL" == *"$site"* ]]; then
-        REQUIRES_AI=true
-        break
-    fi
-done
-
-# If domain requires AI, skip Trafilatura
-if [ "$REQUIRES_AI" = true ]; then
-    echo "🤖 Domain '$DOMAIN' requires AI (JavaScript/anti-bot protection)"
-    echo "🔄 Skipping Trafilatura, going straight to AI..."
-    echo ""
-
-    # Check if we're running inside Claude Code
-    if [ -n "$CLAUDECODE" ]; then
-        echo "⚠️  Running inside Claude Code session"
-        echo ""
-        echo "Please use this prompt directly:"
-        echo ""
-        echo "  \"Please fetch this URL: $URL\""
-        echo ""
-        echo "Or run sbfetch from a separate terminal (not inside Claude Code)"
-        exit 1
-    fi
-
-    # Check if claude CLI exists
-    if ! command -v claude &> /dev/null; then
-        echo "Error: claude CLI not found"
-        echo "Please install Claude Code CLI or use AI manually:"
-        echo "  \"Please fetch this URL: $URL\""
-        exit 1
-    fi
-
-    # Use claude CLI to fetch with AI
-    echo "Invoking AI to fetch content..."
-    claude -p --add-dir /home/lee/second-brain/raw \
-        "Please fetch this URL: $URL
-
-Use the webReader MCP tool to fetch the content and save it as a markdown file.
-Save the file to: $FILENAME
-
-Format the file with:
-- YAML frontmatter with title, source, date_collected, tags
-- Clear heading structure
-- Main content in markdown
-
-After saving, report the filename." 2>&1 | tail -20
-
-    echo ""
-    echo "✅ Done! Check: $FILENAME"
-    exit 0
-fi
-
 # Function to detect if content extraction failed
 extraction_failed() {
     local content="$1"
@@ -142,8 +76,6 @@ extraction_failed() {
         "please verify"
         "captcha"
         "blocked"
-        "subscription"
-        "login required"
     )
 
     for pattern in "${error_patterns[@]}"; do
@@ -155,7 +87,110 @@ extraction_failed() {
     return 1
 }
 
-echo "🔄 Step 1: Trying Trafilatura..."
+# Sites that require browser (JavaScript rendering)
+BROWSER_REQUIRED_SITES=(
+    "mp.weixin.qq.com"
+    "weixin.qq.com"
+    "twitter.com"
+    "x.com"
+    "facebook.com"
+    "medium.com"
+    "substack.com"
+    "linkedin.com"
+)
+
+# Check if this domain requires browser
+REQUIRES_BROWSER=false
+for site in "${BROWSER_REQUIRED_SITES[@]}"; do
+    if [[ "$DOMAIN" == *"$site"* ]] || [[ "$URL" == *"$site"* ]]; then
+        REQUIRES_BROWSER=true
+        break
+    fi
+done
+
+# ===================================================================
+# Method 1: agent-browser (for sites requiring JavaScript)
+# ===================================================================
+if [ "$REQUIRES_BROWSER" = true ]; then
+    echo "🌐 Domain '$DOMAIN' requires browser rendering"
+    echo "🔄 Trying agent-browser..."
+
+    # Check if agent-browser exists
+    if command -v agent-browser &> /dev/null; then
+        # Close any existing sessions first
+        agent-browser close &> /dev/null
+
+        # Try to fetch with agent-browser using Chrome profile for better anti-detection
+        # Check if Default profile exists, use it for cookies/session state
+        if [ -d "$HOME/.config/google-chrome/Default" ]; then
+            echo "  Using Chrome profile (may have cookies/session state)"
+            BROWSER_CONTENT=$(timeout 30 bash -c "
+                agent-browser --profile Default open '$URL' 2>&1
+                sleep 3
+                agent-browser eval 'document.body.innerText' 2>&1
+            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+        else
+            BROWSER_CONTENT=$(timeout 30 bash -c "
+                agent-browser open '$URL' 2>&1
+                sleep 2
+                agent-browser eval 'document.body.innerText' 2>&1
+            " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+        fi
+
+        # Clean up agent-browser session
+        agent-browser close &> /dev/null
+
+        if ! extraction_failed "$BROWSER_CONTENT"; then
+            echo "✅ agent-browser succeeded!"
+
+            # Try to extract title from content
+            TITLE=$(echo "$BROWSER_CONTENT" | head -5 | grep -v '^\s*$' | head -1)
+            if [ -z "$TITLE" ]; then
+                TITLE="$DOMAIN - Article"
+            fi
+
+            # Create markdown file
+            cat > "$FILENAME" << EOF
+---
+title: $TITLE
+source: $URL
+date_collected: $DATE
+tags: [pending]
+fetched_by: agent-browser
+---
+
+# $TITLE
+
+Source: $URL
+Collected: $DATE
+Fetched with: agent-browser
+
+## Content
+
+$BROWSER_CONTENT
+EOF
+
+            echo "✅ Saved to: $FILENAME"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Review the file: less \"$FILENAME\""
+            echo "  2. Process with AI: 'Please process my raw content'"
+            exit 0
+        fi
+    else
+        echo "⚠️  agent-browser not found, skipping..."
+    fi
+fi
+
+# ===================================================================
+# Method 2: Trafilatura (for all other sites or if browser failed)
+# ===================================================================
+if [ "$REQUIRES_BROWSER" = false ]; then
+    echo "🔄 Step 1: Trying Trafilatura..."
+else
+    echo "🔄 Step 2: Falling back to Trafilatura..."
+fi
+
 echo "Fetching: $URL"
 
 # Use Python script with trafilatura and requests
@@ -207,12 +242,14 @@ title: $TITLE
 source: $URL
 date_collected: $DATE
 tags: [pending]
+fetched_by: trafilatura
 ---
 
 # $TITLE
 
 Source: $URL
 Collected: $DATE
+Fetched with: Trafilatura
 
 ## Content
 
@@ -227,33 +264,14 @@ EOF
     exit 0
 fi
 
-# Trafilatura failed - fall back to AI
-echo "⚠️  Trafilatura failed or content was insufficient"
-echo "🔄 Step 2: Falling back to AI (Web Reader MCP)..."
+# ===================================================================
+# Method 3: AI fallback (manual prompt)
+# ===================================================================
+echo "⚠️  Both automated methods failed or content was insufficient"
 echo ""
-
-# Check if claude CLI exists
-if ! command -v claude &> /dev/null; then
-    echo "Error: claude CLI not found"
-    echo "Please install Claude Code CLI or use AI manually:"
-    echo "  \"Please fetch this URL: $URL\""
-    exit 1
-fi
-
-# Use claude CLI to fetch with AI
-echo "Invoking AI to fetch content..."
-claude -p --add-dir /home/lee/second-brain/raw \
-    "Please fetch this URL: $URL
-
-Use the webReader MCP tool to fetch the content and save it as a markdown file.
-Save the file to: $FILENAME
-
-Format the file with:
-- YAML frontmatter with title, source, date_collected, tags
-- Clear heading structure
-- Main content in markdown
-
-After saving, report the filename." 2>&1 | grep -E "(Saved to|✅|Error|Failed)" || echo "AI fetch completed"
-
+echo "Please use AI to fetch this URL:"
 echo ""
-echo "✅ Done! Check if file was created: $FILENAME"
+echo "  \"Please fetch this URL: $URL\""
+echo ""
+echo "The AI will use the Web Reader MCP which can handle complex sites."
+exit 1
