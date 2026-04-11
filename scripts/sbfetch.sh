@@ -69,13 +69,16 @@ extraction_failed() {
     # Check for error patterns (Chinese and English)
     local error_patterns=(
         "环境异常"
-        "验证"
+        "需要验证"
+        "请验证"
+        "请完成验证"
         "access denied"
         "403 forbidden"
         "404 not found"
         "please verify"
         "captcha"
         "blocked"
+        "订阅"
     )
 
     for pattern in "${error_patterns[@]}"; do
@@ -262,6 +265,70 @@ EOF
     echo "  1. Review the file: less \"$FILENAME\""
     echo "  2. Process with AI: 'Please process my raw content'"
     exit 0
+fi
+
+# ===================================================================
+# Method 2.5: agent-browser fallback (if Trafilatura failed and not yet tried)
+# ===================================================================
+if [ "$REQUIRES_BROWSER" = false ]; then
+    echo "⚠️  Trafilatura failed or content was insufficient"
+    echo "🔄 Step 2: Trying agent-browser as fallback..."
+
+    # Check if agent-browser exists
+    if command -v agent-browser &> /dev/null; then
+        # Close any existing sessions first
+        agent-browser close &> /dev/null
+
+        # Try to fetch with agent-browser
+        BROWSER_CONTENT=$(timeout 30 bash -c "
+            agent-browser open '$URL' 2>&1
+            sleep 2
+            agent-browser eval 'document.body.innerText' 2>&1
+        " 2>&1 | grep -v '✓\|⚠\|✗' | tr -d '"')
+
+        # Clean up agent-browser session
+        agent-browser close &> /dev/null
+
+        if ! extraction_failed "$BROWSER_CONTENT"; then
+            echo "✅ agent-browser fallback succeeded!"
+
+            # Try to extract title from content
+            TITLE=$(echo "$BROWSER_CONTENT" | head -5 | grep -v '^\s*$' | head -1)
+            if [ -z "$TITLE" ]; then
+                TITLE="$DOMAIN - Article"
+            fi
+
+            # Create markdown file
+            cat > "$FILENAME" << EOF
+---
+title: $TITLE
+source: $URL
+date_collected: $DATE
+tags: [pending]
+fetched_by: agent-browser
+---
+
+# $TITLE
+
+Source: $URL
+Collected: $DATE
+Fetched with: agent-browser (fallback)
+
+## Content
+
+$BROWSER_CONTENT
+EOF
+
+            echo "✅ Saved to: $FILENAME"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Review the file: less \"$FILENAME\""
+            echo "  2. Process with AI: 'Please process my raw content'"
+            exit 0
+        fi
+    else
+        echo "⚠️  agent-browser not found, skipping..."
+    fi
 fi
 
 # ===================================================================
