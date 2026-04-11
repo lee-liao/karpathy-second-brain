@@ -33,12 +33,13 @@ sb
 
 **🖥️ Terminal:**
 ```bash
-# Search for any topic
+# Search for any topic (all categories)
 sbsearch "your topic"
 
 # Search specific category
-sbtech "topic"
-sbbiz "topic"
+sbsearch tech "topic"
+sbsearch business "topic"
+sbsearch life "topic"
 ```
 
 ---
@@ -121,10 +122,11 @@ sout         # cd to outputs/
 
 **Search:**
 ```bash
-sbsearch "topic"    # Search all wiki
-sbtech "topic"      # Search tech/ only
-sbbiz "topic"       # Search business/ only
-sblife "topic"      # Search life/ only
+sbsearch "topic"           # Search all wiki
+sbsearch tech "topic"      # Search tech/ only
+sbsearch business "topic"  # Search business/ only
+sbsearch life "topic"      # Search life/ only
+sbsearch quotes "topic"    # Search quotes/ only
 ```
 
 **Information:**
