@@ -6,6 +6,44 @@ A Karpathy-inspired minimalist knowledge management system using AI + flat markd
 
 ---
 
+## Prerequisites
+
+This project requires several tools to be installed:
+
+### Required Tools
+
+1. **Python 3 + Virtual Environment**
+   ```bash
+   python3 -m venv ~/.venv/second-brain
+   source ~/.venv/second-brain/bin/activate
+   pip install trafilatura requests
+   ```
+
+2. **agent-browser** (Browser automation for JavaScript-heavy sites)
+   ```bash
+   npm install -g agent-browser
+   # Or: sudo npm install -g agent-browser
+   ```
+
+3. **bun** (JavaScript runtime for agent-browser)
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   source ~/.bashrc
+   ```
+
+4. **Claude Code** (AI assistant for processing content)
+   - Download from: https://claude.com/claude-code
+   - Required for AI-powered content processing and fetching
+
+### Optional Tools
+
+- **unzip** (for bun installation)
+  ```bash
+  sudo apt install unzip
+  ```
+
+---
+
 ## What Is This?
 
 A personal knowledge base that separates **collection** from **organization**:
@@ -62,15 +100,36 @@ sbsearch "topic"
 
 ### Collect Content
 
-**From a URL:**
-```
-"Please fetch this URL: [paste-url-here]"
+This system uses a **three-tier fetching strategy** to handle different types of websites:
+
+**Tier 1: Trafilatura** (Fast, free)
+- Works for: Blogs, news sites, documentation
+- Example: `paulgraham.com`, `example.com`
+- No browser required, pure HTTP fetching
+
+**Tier 2: agent-browser** (JavaScript rendering)
+- Works for: Sites requiring JS, dynamic content
+- Example: Web apps, SPAs
+- Uses headless Chrome with session persistence
+
+**Tier 3: AI/Web Reader MCP** (Enterprise protection)
+- Works for: WeChat, paywalled sites, heavily protected sites
+- Example: `mp.weixin.qq.com`, `twitter.com`
+- Uses cloud infrastructure with advanced anti-detection
+
+**Usage:**
+```bash
+# Automatic tier selection - tries Trafilatura, then agent-browser, then prompts for AI
+sbfetch https://example.com/article
+
+# For WeChat and protected sites - use AI directly
+"Please fetch this URL: https://mp.weixin.qq.com/s/..."
 ```
 
 **Manual notes:**
-```
-Create a file in raw/personal/notes-YYYY-MM-DD.md
-Paste your content
+```bash
+# Create a file manually
+echo "My thoughts..." > raw/personal/notes-$(date +%Y-%m-%d).md
 ```
 
 ### Process Content (Weekly)
@@ -91,8 +150,9 @@ AI will:
 
 **Search:**
 ```bash
-sbsearch "machine learning"  # Search all wiki
-sbtech "productivity"        # Search tech only
+sbsearch "topic"              # Search all wiki
+sbsearch tech "python"        # Search tech category
+sbsearch business "startup"   # Search business category
 ```
 
 **Ask questions:**
@@ -114,12 +174,19 @@ swiki       # cd to wiki/
 sout        # cd to outputs/
 ```
 
+### Content Collection
+```bash
+sbfetch <url>                 # Smart fetch (auto-selects method)
+                              # Uses: Trafilatura → agent-browser → AI prompt
+```
+
 ### Search
 ```bash
-sbsearch "topic"    # Search all wiki content
-sbtech "topic"      # Search tech/ articles
-sbbiz "topic"       # Search business/ articles
-sblife "topic"      # Search life/ articles
+sbsearch "topic"              # Search all wiki
+sbsearch tech "topic"         # Search tech/ only
+sbsearch business "topic"     # Search business/ only
+sbsearch life "topic"         # Search life/ only
+sbsearch quotes "topic"       # Search quotes/ only
 ```
 
 ### Information
@@ -135,12 +202,53 @@ sblsraw     # List raw files pending processing
 ```bash
 ~/second-brain/scripts/stats.sh          # Statistics dashboard
 ~/second-brain/scripts/search-wiki.sh    # Search with context
+~/second-brain/scripts/sbfetch.sh        # Smart URL fetcher
 ~/second-brain/scripts/process-raw.sh    # Show processing prompt
 ```
 
 ---
 
 ## How It Works
+
+### Three-Tier Fetching Architecture
+
+The `sbfetch` command automatically selects the best fetching method:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    sbfetch <url>                            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                ┌─────────────────────────┐
+                │   Tier 1: Trafilatura   │  ← Fast, free
+                │   (Python library)      │     Works for 90% of sites
+                └──────────┬──────────────┘
+                           │ (if fails)
+                           ▼
+                ┌─────────────────────────┐
+                │   Tier 2: agent-browser │  ← JavaScript rendering
+                │   (Local Chrome)        │     Handles dynamic content
+                └──────────┬──────────────┘
+                           │ (if fails)
+                           ▼
+                ┌─────────────────────────┐
+                │   Tier 3: AI Prompt     │  ← Cloud infrastructure
+                │   (Web Reader MCP)      │     Bypasses protection
+                └─────────────────────────┘
+```
+
+**Why three tiers?**
+- **Speed:** Trafilatura is instant (~2 seconds)
+- **Coverage:** agent-browser handles JavaScript sites
+- **Reliability:** AI bypasses enterprise-grade protection (WeChat, etc.)
+
+**Sites that require AI (Tier 3):**
+- WeChat articles (`mp.weixin.qq.com`)
+- Twitter/X (`x.com`, `twitter.com`)
+- Facebook (`facebook.com`)
+- Medium (`medium.com`)
+- LinkedIn (`linkedin.com`)
 
 ### No Database, Just Files
 
@@ -153,11 +261,11 @@ Database -> Index -> Search Engine -> Results
 ```
 
 **Benefits:**
-- [OK] Files are human-readable (any text editor)
-- [OK] Git-friendly (version control your knowledge)
-- [OK] No database corruption
-- [OK] Zero dependencies
-- [OK] Grep is blazing fast
+- ✅ Files are human-readable (any text editor)
+- ✅ Git-friendly (version control your knowledge)
+- ✅ No database corruption
+- ✅ Grep is blazing fast
+- ✅ Works offline (except AI fetching)
 
 ### Search Performance
 
@@ -168,28 +276,6 @@ Database -> Index -> Search Engine -> Results
 | 50,000   | ~10 seconds |
 
 **You won't hit practical limits for 10-20 years.**
-
-### Scalability
-
-**At 5 articles/day:**
-```
-1 year   = 1,825 articles
-5 years  = 9,125 articles
-10 years = 18,250 articles
-20 years = 36,500 articles
-```
-
-**When to optimize:**
-- ~10,000 articles (~5 years) -> Consider archiving old content
-- Process in batches instead of all at once
-- Archive by year: `wiki/2026/`, `wiki/2027/`, `wiki/archive/`
-
-**Real bottleneck:** AI context window, not grep
-```
-Solution: Process incrementally
-"Process raw content from last 7 days only"
-"Process tech/ category only"
-```
 
 ---
 
@@ -232,14 +318,15 @@ Personal thoughts, connections, action items
 
 Already done! System is ready at `/home/lee/second-brain/`
 
-### Load Aliases (if needed)
+### Load Aliases
 
 ```bash
-# Add to ~/.bashrc for automatic loading
-echo 'source ~/.bash_aliases' >> ~/.bashrc
+# Aliases are loaded from ~/.bash_aliases_second_brain
+# Add to ~/.bashrc for automatic loading:
+echo 'source ~/.bash_aliases_second_brain' >> ~/.bashrc
 
-# Or load manually
-source ~/.bash_aliases
+# Reload manually
+source ~/.bashrc
 ```
 
 ### Customize Categories
@@ -262,9 +349,11 @@ Edit `CLAUDE.md` to add/modify categories:
 ### Collect & Process an Article
 
 ```bash
-# 1. Collect
-sb
-# Paste to Claude: "Please fetch this URL: https://example.com/article"
+# 1. Collect (automatic tier selection)
+sbfetch https://example.com/article
+
+# Or for WeChat/protected sites:
+# Paste to Claude: "Please fetch this URL: https://mp.weixin.qq.com/s/..."
 
 # 2. Process (do this weekly)
 # Paste to Claude: "Please process my raw content"
@@ -306,19 +395,21 @@ sbrecent
 
 ## Tips & Best Practices
 
-### DO [OK]
+### DO ✅
 - **Collect freely** - Don't worry about organizing when collecting
 - **Process weekly** - Batch processing is more efficient
 - **Tag sparingly** - 3-5 relevant tags maximum
 - **Link articles** - Build connections via `related:` metadata
 - **Save outputs** - Good Q&A should go to `outputs/`
+- **Use sbfetch** - Let it auto-select the best fetching method
 
-### DON'T [X]
+### DON'T ❌
 - **Don't** overthink categories - Start simple, evolve later
 - **Don't** batch process 1000+ files - Do it incrementally
 - **Don't** duplicate - Link to existing articles instead
 - **Don't** hoard - Delete low-quality content
 - **Don't** obsess over perfect tagging - Good enough is fine
+- **Don't** force automation on WeChat - Use AI prompt (it works better)
 
 ---
 
@@ -333,7 +424,7 @@ git add .
 git commit -m "Initial knowledge base"
 
 # Track changes over time
-git log --wiki/tech/  # See how your tech knowledge evolved
+git log -- wiki/tech/  # See how your tech knowledge evolved
 ```
 
 ### Batch URL Collection
@@ -368,10 +459,17 @@ cp -r wiki/ ~/ObsidianVault/
 ### Aliases not working
 ```bash
 # Reload them
-source ~/.bash_aliases
+source ~/.bash_aliases_second_brain
 
 # Or add to .bashrc
-echo 'source ~/.bash_aliases' >> ~/.bashrc
+echo 'source ~/.bash_aliases_second_brain' >> ~/.bashrc
+```
+
+### sbfetch fails on WeChat
+```bash
+# This is expected! WeChat requires AI
+# Use the AI prompt instead:
+"Please fetch this URL: https://mp.weixin.qq.com/s/..."
 ```
 
 ### Search returning nothing
@@ -408,6 +506,8 @@ sbcount
 | `QUICKSTART.md` | One-page quick reference |
 | `wiki/INDEX.md` | Master table of contents |
 | `scripts/*.sh` | Automation helpers |
+| `scripts/sbfetch.sh` | Smart URL fetcher (3-tier) |
+| `scripts/search-wiki.sh` | Search with category support |
 
 ---
 
@@ -423,6 +523,7 @@ sbcount
 3. **AI does the work** - Let AI extract, categorize, connect
 4. **Grep is your database** - Standard unix tools are powerful enough
 5. **Optimize when needed** - Don't pre-optimize, start simple
+6. **Right tool for the job** - Use Trafilatura for speed, AI for reliability
 
 ---
 
@@ -443,4 +544,4 @@ This is my personal knowledge management system. Feel free to copy and adapt for
 
 **Location:** `/home/lee/second-brain/`
 **Created:** 2026-04-10
-**Last updated:** 2026-04-10
+**Last updated:** 2026-04-11
