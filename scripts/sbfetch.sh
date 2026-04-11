@@ -2,10 +2,12 @@
 # sbfetch.sh - Fetch URL and save to raw/ directory
 # Usage: sbfetch <url>
 #
-# Strategy:
-# 1. Try Trafilatura (fast, standalone) - for most sites
-# 2. Try agent-browser (JavaScript rendering) - for protected sites
-# 3. Fall back to AI prompt (user manual) - if both fail
+# Three-tier fetch strategy:
+# Tier 1: Trafilatura (fast, standalone) - for most sites
+# Tier 2: agent-browser (JavaScript rendering) - for protected sites
+# Tier 3: Claude AI (Web Reader MCP) - for anti-bot sites
+#
+# Sites in CLAUDE_FIRST_SITES skip directly to Tier 3
 
 URL="$1"
 
@@ -27,8 +29,64 @@ VENV_PYTHON="$HOME/.venv/second-brain/bin/python"
 # Check if venv exists
 if [ ! -f "$VENV_PYTHON" ]; then
     echo "Error: Virtual environment not found at $VENV_PYTHON"
-    echo "Please run: python3 -m venv ~/.venv/second-brain && source ~/.venv/second-brain/bin/activate && pip install trafilatura requests"
+    echo "Please run: python3 -m venv ~/.venv/second-brain && source ~/.venv/second-brain/bin/activate && pip install trafilatura requests pyyaml"
     exit 1
+fi
+
+# Configuration file
+CONFIG_FILE="$HOME/.config/sbfetch/config.yaml"
+
+# Function to read YAML config and output shell arrays
+read_yaml_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 1
+    fi
+
+    $VENV_PYTHON - "$CONFIG_FILE" <<'PYTHON_SCRIPT'
+import sys
+import yaml
+
+try:
+    with open(sys.argv[1], 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Output browser_required sites
+    if 'browser_required' in config:
+        print("BROWSER_REQUIRED_SITES=" + "|".join(config['browser_required']))
+
+    # Output claude_first sites
+    if 'claude_first' in config:
+        print("CLAUDE_FIRST_SITES=" + "|".join(config['claude_first']))
+
+except Exception as e:
+    sys.exit(1)
+PYTHON_SCRIPT
+}
+
+# Read config if available
+CONFIG_OUTPUT=$(read_yaml_config)
+if [ $? -eq 0 ] && [ -n "$CONFIG_OUTPUT" ]; then
+    # Parse the output into arrays
+    BROWSER_REQUIRED_SITES_STR=$(echo "$CONFIG_OUTPUT" | grep "^BROWSER_REQUIRED_SITES=" | cut -d= -f2)
+    CLAUDE_FIRST_SITES_STR=$(echo "$CONFIG_OUTPUT" | grep "^CLAUDE_FIRST_SITES=" | cut -d= -f2)
+
+    IFS='|' read -ra BROWSER_REQUIRED_SITES <<< "$BROWSER_REQUIRED_SITES_STR"
+    IFS='|' read -ra CLAUDE_FIRST_SITES <<< "$CLAUDE_FIRST_SITES_STR"
+else
+    # Fallback to hardcoded values if config doesn't exist
+    BROWSER_REQUIRED_SITES=(
+        "twitter.com"
+        "x.com"
+        "facebook.com"
+        "medium.com"
+        "substack.com"
+        "linkedin.com"
+    )
+
+    CLAUDE_FIRST_SITES=(
+        "mp.weixin.qq.com"
+        "weixin.qq.com"
+    )
 fi
 
 # Generate filename from URL
@@ -90,18 +148,6 @@ extraction_failed() {
     return 1
 }
 
-# Sites that require browser (JavaScript rendering)
-BROWSER_REQUIRED_SITES=(
-    "mp.weixin.qq.com"
-    "weixin.qq.com"
-    "twitter.com"
-    "x.com"
-    "facebook.com"
-    "medium.com"
-    "substack.com"
-    "linkedin.com"
-)
-
 # Check if this domain requires browser
 REQUIRES_BROWSER=false
 for site in "${BROWSER_REQUIRED_SITES[@]}"; do
@@ -110,6 +156,85 @@ for site in "${BROWSER_REQUIRED_SITES[@]}"; do
         break
     fi
 done
+
+# Check if this domain should go directly to Claude
+USE_CLAUDE_FIRST=false
+for site in "${CLAUDE_FIRST_SITES[@]}"; do
+    if [[ "$DOMAIN" == *"$site"* ]] || [[ "$URL" == *"$site"* ]]; then
+        USE_CLAUDE_FIRST=true
+        break
+    fi
+done
+
+# ===================================================================
+# Skip to Claude AI for sites with strong anti-bot protection
+# ===================================================================
+if [ "$USE_CLAUDE_FIRST" = true ]; then
+    echo "🌐 Domain '$DOMAIN' has strong anti-bot protection"
+    echo "🔄 Skipping directly to Claude AI (most reliable method)..."
+
+    # Check if we're already inside a Claude session
+    if [ -n "$CLAUDECODE" ]; then
+        echo "⚠️  sbfetch is running from within a Claude session."
+        echo ""
+        echo "Please ask me directly:"
+        echo "  \"Please fetch this URL and save it: $URL\""
+        echo ""
+        echo "Or run sbfetch from your terminal (not from within Claude)."
+        exit 1
+    fi
+
+    # Check if claude command exists
+    if ! command -v claude &> /dev/null; then
+        echo "⚠️  Claude command not found. Please install Claude Code CLI:"
+        echo "  https://github.com/anthropics/claude-code"
+        exit 1
+    fi
+
+    # Create prompt for Claude
+    PROMPT="Please fetch the content from this URL: $URL
+
+Use the Web Reader MCP (mcp__web_reader__webReader) or any available method to retrieve the content.
+
+After fetching, save the markdown content to this exact path:
+$FILENAME
+
+Include the following metadata at the top of the file:
+---
+title: [Extract from page title or generate descriptive title]
+source: $URL
+date_collected: $DATE
+tags: [pending]
+fetched_by: claude-ai
+---
+
+The content should be well-formatted markdown. Return a brief confirmation when complete."
+
+    # Invoke Claude in non-interactive mode
+    echo "Invoking Claude AI..."
+    claude -p "$PROMPT" --permission-mode bypassPermissions 2>&1
+
+    CLAUDE_EXIT=$?
+
+    if [ $CLAUDE_EXIT -eq 0 ] && [ -f "$FILENAME" ]; then
+        echo ""
+        echo "✅ Claude AI succeeded!"
+        echo "✅ Saved to: $FILENAME"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Review the file: less \"$FILENAME\""
+        echo "  2. Process with AI: 'Please process my raw content'"
+        exit 0
+    else
+        echo ""
+        echo "❌ Claude AI failed"
+        echo ""
+        echo "Manual options:"
+        echo "  1. Run from terminal: claude -p \"Please fetch and save: $URL\""
+        echo "  2. Or ask directly in this Claude session if running from one"
+        exit 1
+    fi
+fi
 
 # ===================================================================
 # Method 1: agent-browser (for sites requiring JavaScript)
@@ -332,13 +457,70 @@ EOF
 fi
 
 # ===================================================================
-# Method 3: AI fallback (manual prompt)
+# Method 3: AI fallback (non-interactive Claude)
 # ===================================================================
 echo "⚠️  Both automated methods failed or content was insufficient"
 echo ""
-echo "Please use AI to fetch this URL:"
-echo ""
-echo "  \"Please fetch this URL: $URL\""
-echo ""
-echo "The AI will use the Web Reader MCP which can handle complex sites."
-exit 1
+echo "🔄 Step 3: Trying Claude AI with Web Reader MCP..."
+
+# Check if claude command exists
+if ! command -v claude &> /dev/null; then
+    echo "⚠️  Claude command not found. Please install Claude Code CLI:"
+    echo "  https://github.com/anthropics/claude-code"
+    exit 1
+fi
+
+# Check if we're already inside a Claude session
+if [ -n "$CLAUDECODE" ]; then
+    echo "⚠️  sbfetch is running from within a Claude session."
+    echo ""
+    echo "Please ask me directly:"
+    echo "  \"Please fetch this URL and save it: $URL\""
+    echo ""
+    echo "Or run sbfetch from your terminal (not from within Claude)."
+    exit 1
+fi
+
+# Create a prompt that instructs Claude to fetch and save the content
+PROMPT="Please fetch the content from this URL: $URL
+
+Use the Web Reader MCP (mcp__web_reader__webReader) or any available method to retrieve the content.
+
+After fetching, save the markdown content to this exact path:
+$FILENAME
+
+Include the following metadata at the top of the file:
+---
+title: [Extract from page title or generate descriptive title]
+source: $URL
+date_collected: $DATE
+tags: [pending]
+fetched_by: claude-ai
+---
+
+The content should be well-formatted markdown. Return a brief confirmation when complete."
+
+# Invoke Claude in non-interactive mode
+echo "Invoking Claude AI..."
+claude -p "$PROMPT" --permission-mode bypassPermissions 2>&1
+
+CLAUDE_EXIT=$?
+
+if [ $CLAUDE_EXIT -eq 0 ] && [ -f "$FILENAME" ]; then
+    echo ""
+    echo "✅ Claude AI succeeded!"
+    echo "✅ Saved to: $FILENAME"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Review the file: less \"$FILENAME\""
+    echo "  2. Process with AI: 'Please process my raw content'"
+    exit 0
+else
+    echo ""
+    echo "❌ Claude AI fallback failed"
+    echo ""
+    echo "Manual options:"
+    echo "  1. Run from terminal: claude -p \"Please fetch and save: $URL\""
+    echo "  2. Or ask directly in this Claude session if running from one"
+    exit 1
+fi

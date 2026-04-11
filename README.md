@@ -16,7 +16,7 @@ This project requires several tools to be installed:
    ```bash
    python3 -m venv ~/.venv/second-brain
    source ~/.venv/second-brain/bin/activate
-   pip install trafilatura requests
+   pip install trafilatura requests pyyaml
    ```
 
 2. **agent-browser** (Browser automation for JavaScript-heavy sites)
@@ -100,7 +100,7 @@ sbsearch "topic"
 
 ### Collect Content
 
-This system uses a **three-tier fetching strategy** to handle different types of websites:
+This system uses a **three-tier fetching strategy** to handle different types of websites. Site behavior is configured via `~/.config/sbfetch/config.yaml`:
 
 **Tier 1: Trafilatura** (Fast, free)
 - Works for: Blogs, news sites, documentation
@@ -341,6 +341,34 @@ Edit `CLAUDE.md` to add/modify categories:
 - quotes/   # Notable quotes
 - cooking/  # Your new category!
 ```
+
+### Customize sbfetch Site Configuration
+
+Edit `~/.config/sbfetch/config.yaml` to customize which sites use which fetching tier:
+
+```yaml
+# Sites that require browser rendering (JavaScript)
+# These sites will try agent-browser first, then fall back to other methods
+browser_required:
+  - twitter.com
+  - x.com
+  - facebook.com
+  - medium.com
+  - substack.com
+  - linkedin.com
+
+# Sites with strong anti-bot protection that should go directly to Claude AI
+# These sites skip agent-browser and Trafilatura entirely
+claude_first:
+  - mp.weixin.qq.com
+  - weixin.qq.com
+  # Add more protected sites here
+```
+
+**Why configure this?**
+- **Speed**: Skip slow methods for known problematic sites
+- **Reliability**: Go directly to AI for sites that always fail with automated tools
+- **Cost**: Save API calls by trying faster methods first for compatible sites
 
 ---
 

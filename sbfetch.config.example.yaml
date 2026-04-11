@@ -1,0 +1,29 @@
+# sbfetch configuration file
+#
+# To use this configuration:
+# 1. Create the config directory: mkdir -p ~/.config/sbfetch
+# 2. Copy this file: cp sbfetch.config.example.yaml ~/.config/sbfetch/config.yaml
+# 3. Edit as needed: nano ~/.config/sbfetch/config.yaml
+
+# Sites that require browser rendering (JavaScript)
+# These sites will try agent-browser first, then fall back to other methods
+browser_required:
+  - twitter.com
+  - x.com
+  - facebook.com
+  - medium.com
+  - substack.com
+  - linkedin.com
+
+# Sites with strong anti-bot protection that should go directly to Claude AI
+# These sites skip agent-browser and Trafilatura entirely
+claude_first:
+  - mp.weixin.qq.com
+  - weixin.qq.com
+
+# You can add more sites as needed
+# Example:
+# claude_first:
+#   - mp.weixin.qq.com
+#   - weixin.qq.com
+#   - some-other-protected-site.com
